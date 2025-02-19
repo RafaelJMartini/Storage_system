@@ -306,26 +306,38 @@ def gerar_excel():
 def remover_prod():
     produtos = []
     quantidades = []
-    try:
-        conn = psycopg2.connect(**config)
+    produtos_dict = {}
+    keys = {}
+    def consulta_banco():
+        try:
+            conn = psycopg2.connect(**config)
 
-        cursor = conn.cursor()
-                
-        #Verificar se a nota já está no banco
-        query = f'''
-        SELECT nomeprod,quant FROM produtos
-        '''
-        cursor.execute(query)
-        
-        resultados = cursor.fetchall()
-        resultados = dict(resultados)
-        for key in resultados:
-            produtos.append(key)
-            quantidades.append(resultados[key])
+            cursor = conn.cursor()
+                    
+            #Verificar se a nota já está no banco
+            query = f'''
+            SELECT idproduto,nomeprod,quant FROM produtos
+            '''
+            cursor.execute(query)
+            
+            nonlocal produtos_dict
+            nonlocal keys
+            #quantidades = []
+            # Iterando pelos resultados da consulta e criando o dicionário
+            for row in cursor.fetchall():
+                idproduto, nomeprod, quant = row
+                chave = f"{idproduto} - {nomeprod}"  # Você pode usar o idproduto + nomeprod como chave
+                produtos_dict[chave] = quant  # Quantidade é o valor
+                keys[chave] = idproduto
+                #quantidades.append(quant)
+            cursor.close()
+            conn.close()
 
-    except psycopg2.Error as e:
-        log += "\nFALHA AO CONECTAR AO BANCO"
-        print(f"Erro ao conectar no banco:{str(e)}")
+        except psycopg2.Error as e:
+            log = "\nFALHA AO CONECTAR AO BANCO"
+            print(f"Erro ao conectar no banco:{str(e)}")
+            return log
+    consulta_banco()
 
 
     def formatar_quantidade(valor):
@@ -337,7 +349,11 @@ def remover_prod():
     def atualizar_quantidade(event):
         """ Atualiza o texto com a quantidade do item selecionado """
         item_selecionado = btn_selecionaprod.get()  # Pega o item selecionado no combobox
-        quantidade = resultados.get(item_selecionado, "Indisponível")  # Busca a quantidade no dicionário
+        quantidade = produtos_dict.get(item_selecionado, "Indisponível")  # Busca a quantidade no dicionário
+        try:
+            quantidade = float(quantidade)
+        except ValueError:
+            return None
         maximoitem = "(Max: {})".format(formatar_quantidade(quantidade))
         txtmax['text'] = maximoitem
         txtprodinvalid['text'] = ''
@@ -348,8 +364,9 @@ def remover_prod():
     janela_remover = Tk()
     janela_remover.title("Remover um produto")
     janela_remover.geometry('600x400+650+200')
-    
-    btn_selecionaprod = Combobox(janela_remover,values=produtos)
+    lista_produtos = keys.keys()
+    lista_produtos = list(lista_produtos)
+    btn_selecionaprod = Combobox(janela_remover,values=lista_produtos)
     btn_selecionaprod.pack(pady=40,ipadx=150)
     btn_selecionaprod.set("Escolha um produto")
 
@@ -377,14 +394,23 @@ def remover_prod():
     txtprodinvalid = Label(janela_remover,text="")
     txtprodinvalid.pack()
 
-    quantidade = btn_selecionaprod.bind("<<ComboboxSelected>>", atualizar_quantidade)
+    btn_selecionaprod.bind("<<ComboboxSelected>>", atualizar_quantidade)
 
     def remover():
-
-        if btn_selecionaprod.get() not in produtos:
+        nonlocal log
+        if btn_selecionaprod.get() not in lista_produtos:
             txtprodinvalid["text"] = "Por favor, selecione um produto válido."
             return
-        numero = entrada.get()  # Pega o valor digitado no campo
+        try:
+            numero = float(entrada.get())  # Pega o valor digitado no campo
+        except ValueError:
+            txtprodinvalid['text'] = 'Por favor, insira um número válido'
+            return
+
+        quantidade = atualizar_quantidade(None)
+        if quantidade == None:
+            txtprodinvalid["text"] = "Por favor, insira um número válido."
+            return
         if numero > quantidade:
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
@@ -395,9 +421,36 @@ def remover_prod():
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
 
+        
+        try:
+            conn = psycopg2.connect(**config)
 
-        log = "\nProdutos removidos com sucesso"
-        txtprodinvalid["text"] += log
+            cursor = conn.cursor()
+            nova_quant = quantidade - numero
+            query = f'''
+            UPDATE produtos
+            SET quant = %s
+            WHERE idproduto = %s
+            '''
+            cursor.execute(query,(nova_quant,int(keys[btn_selecionaprod.get()])))
+
+            print(f"removendo {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
+            conn.commit()
+            cursor.close()
+            conn.close()
+            log = "\nProdutos removidos com sucesso"
+            consulta_banco()
+            quantidade = atualizar_quantidade(None)
+            txtprodinvalid["text"] += log
+
+        except psycopg2.Error as e:
+            log += f"\nFALHA AO CONECTAR AO BANCO PARA REMOVER O PRODUTO: {str(e)}"
+            print(f"Erro ao conectar no banco:{str(e)}")
+
+
+
+
+        
 
 
         
