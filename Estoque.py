@@ -1,4 +1,5 @@
 from tkinter import *
+from tkinter.ttk import Combobox
 import psycopg2
 import os
 import shutil
@@ -303,12 +304,111 @@ def gerar_excel():
     msg["text"] = log
 
 def remover_prod():
+    produtos = []
+    quantidades = []
+    try:
+        conn = psycopg2.connect(**config)
+
+        cursor = conn.cursor()
+                
+        #Verificar se a nota já está no banco
+        query = f'''
+        SELECT nomeprod,quant FROM produtos
+        '''
+        cursor.execute(query)
+        
+        resultados = cursor.fetchall()
+        resultados = dict(resultados)
+        for key in resultados:
+            produtos.append(key)
+            quantidades.append(resultados[key])
+
+    except psycopg2.Error as e:
+        log += "\nFALHA AO CONECTAR AO BANCO"
+        print(f"Erro ao conectar no banco:{str(e)}")
+
+
+    def formatar_quantidade(valor):
+        """ Arredonda a quantidade para o máximo possível (inteiro se não tiver decimal) """
+        valor = float(valor)
+        valor = round(valor, 2)  # Arredonda para 2 casas
+        return int(valor) if valor == int(valor) else valor  # Remove ".0" se for inteiro
+
+    def atualizar_quantidade(event):
+        """ Atualiza o texto com a quantidade do item selecionado """
+        item_selecionado = btn_selecionaprod.get()  # Pega o item selecionado no combobox
+        quantidade = resultados.get(item_selecionado, "Indisponível")  # Busca a quantidade no dicionário
+        maximoitem = "(Max: {})".format(formatar_quantidade(quantidade))
+        txtmax['text'] = maximoitem
+        txtprodinvalid['text'] = ''
+        return quantidade
+
+    
     log = ""
+    janela_remover = Tk()
+    janela_remover.title("Remover um produto")
+    janela_remover.geometry('600x400+650+200')
+    
+    btn_selecionaprod = Combobox(janela_remover,values=produtos)
+    btn_selecionaprod.pack(pady=40,ipadx=150)
+    btn_selecionaprod.set("Escolha um produto")
 
 
+    def ao_clicar(event):
+        if entrada.get() == "Digite a quantidade":
+            entrada.delete(0, "end")  # Remove o placeholder
+            entrada.config(fg="black")  # Muda a cor do texto
 
-    log += "\nProdutos removidos com sucesso"
-    msg["text"] = log
+    def ao_sair(event):
+        if not entrada.get():
+            entrada.insert(0, "Digite a quantidade")  # Reinsere o placeholder
+            entrada.config(fg="gray")  # Volta a cor para cinza
+    entrada = Entry(janela_remover)
+    entrada.pack(pady=10,ipadx=50)
+    entrada.insert(0, "Digite a quantidade")  # Define o placeholder
+
+    # Eventos para limpar/recuperar o placeholder
+    entrada.bind("<FocusIn>", ao_clicar)
+    entrada.bind("<FocusOut>", ao_sair)
+
+    txtmax = Label(janela_remover,text="")
+    txtmax.pack()
+
+    txtprodinvalid = Label(janela_remover,text="")
+    txtprodinvalid.pack()
+
+    quantidade = btn_selecionaprod.bind("<<ComboboxSelected>>", atualizar_quantidade)
+
+    def remover():
+
+        if btn_selecionaprod.get() not in produtos:
+            txtprodinvalid["text"] = "Por favor, selecione um produto válido."
+            return
+        numero = entrada.get()  # Pega o valor digitado no campo
+        if numero > quantidade:
+            txtprodinvalid["text"] = "Por favor, insira um número válido."
+            return
+        try:
+            numero = int(numero)  # Converte para inteiro (ou float se quiser)
+            print(f"Número inserido: {numero}")
+        except ValueError:
+            txtprodinvalid["text"] = "Por favor, insira um número válido."
+            return
+
+
+        log = "\nProdutos removidos com sucesso"
+        txtprodinvalid["text"] += log
+
+
+        
+
+    btn = Button(janela_remover, text="Remover", command=remover)
+    btn.pack()
+
+
+    janela_remover.mainloop()
+
+
 
 
 #window config
