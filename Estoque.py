@@ -303,9 +303,7 @@ def gerar_excel():
     log += "\nExcel gerado com sucesso"
     msg["text"] = log
 
-def remover_prod():
-    produtos = []
-    quantidades = []
+def add_rm_prod():
     produtos_dict = {}
     keys = {}
     def consulta_banco():
@@ -346,7 +344,9 @@ def remover_prod():
         valor = round(valor, 2)  # Arredonda para 2 casas
         return int(valor) if valor == int(valor) else valor  # Remove ".0" se for inteiro
 
-    def atualizar_quantidade(event):
+    def atualizar_quantidade(*_):
+
+
         """ Atualiza o texto com a quantidade do item selecionado """
         item_selecionado = btn_selecionaprod.get()  # Pega o item selecionado no combobox
         quantidade = produtos_dict.get(item_selecionado, "Indisponível")  # Busca a quantidade no dicionário
@@ -354,23 +354,60 @@ def remover_prod():
             quantidade = float(quantidade)
         except ValueError:
             return None
-        maximoitem = "(Max: {})".format(formatar_quantidade(quantidade))
-        txtmax['text'] = maximoitem
-        txtprodinvalid['text'] = ''
+        if opcao_var.get() == "Remover":
+            
+            maximoitem = "(Max: {})".format(formatar_quantidade(quantidade))
+            txtmax['text'] = maximoitem
+            txtprodinvalid['text'] = ''
+            
+        else:
+            txtmax['text'] = ""
         return quantidade
+        
+
+    def escolha_rm():
+        opcao_var.set("Remover")
+        print("Escolha atual:", opcao_var.get())
+        btn.config(text=f"{opcao_var.get()}")
+        atualizar_quantidade()
+    
+    def escolha_add():
+        opcao_var.set("Adicionar")
+        print("Escolha atual:", opcao_var.get())
+        btn.config(text=f"{opcao_var.get()}")
+        txtmax['text'] = ""
+
+    log = ""
+    janela_add_rm = Tk()
+    janela_add_rm.title("Adicionar ou remover um produto")
+    janela_add_rm.geometry('600x400+650+200')
+
+    #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     
-    log = ""
-    janela_remover = Tk()
-    janela_remover.title("Remover um produto")
-    janela_remover.geometry('600x400+650+200')
+    opcao_var = StringVar()
+
+    radio1 = Radiobutton(janela_add_rm, text="Adicionar", variable=opcao_var, value="Adicionar", command=escolha_add)
+    radio2 = Radiobutton(janela_add_rm, text="Remover", variable=opcao_var, value="Remover", command=escolha_rm)
+
+    opcao_var.set("Adicionar")
+
+    # Posiciona os botões na janela
+    radio1.pack(pady=10)
+    radio2.pack()
+    
+
+
+
     lista_produtos = keys.keys()
     lista_produtos = list(lista_produtos)
-    btn_selecionaprod = Combobox(janela_remover,values=lista_produtos)
+    btn_selecionaprod = Combobox(janela_add_rm,values=lista_produtos)
     btn_selecionaprod.pack(pady=40,ipadx=150)
     btn_selecionaprod.set("Escolha um produto")
 
 
+#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 
     def ao_clicar(event):
         if entrada.get() == "Digite a quantidade":
             entrada.delete(0, "end")  # Remove o placeholder
@@ -380,7 +417,7 @@ def remover_prod():
         if not entrada.get():
             entrada.insert(0, "Digite a quantidade")  # Reinsere o placeholder
             entrada.config(fg="gray")  # Volta a cor para cinza
-    entrada = Entry(janela_remover)
+    entrada = Entry(janela_add_rm)
     entrada.pack(pady=10,ipadx=50)
     entrada.insert(0, "Digite a quantidade")  # Define o placeholder
 
@@ -388,15 +425,15 @@ def remover_prod():
     entrada.bind("<FocusIn>", ao_clicar)
     entrada.bind("<FocusOut>", ao_sair)
 
-    txtmax = Label(janela_remover,text="")
+    txtmax = Label(janela_add_rm,text="")
     txtmax.pack()
 
-    txtprodinvalid = Label(janela_remover,text="")
+    txtprodinvalid = Label(janela_add_rm,text="")
     txtprodinvalid.pack()
 
     btn_selecionaprod.bind("<<ComboboxSelected>>", atualizar_quantidade)
 
-    def remover():
+    def remover_adicionar():
         nonlocal log
         if btn_selecionaprod.get() not in lista_produtos:
             txtprodinvalid["text"] = "Por favor, selecione um produto válido."
@@ -411,22 +448,30 @@ def remover_prod():
         if quantidade == None:
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
-        if numero > quantidade:
-            txtprodinvalid["text"] = "Por favor, insira um número válido."
-            return
+        if opcao_var.get() == "Remover":
+            if numero > quantidade:
+                txtprodinvalid["text"] = "Por favor, insira um número válido."
+                return
+        
         try:
             numero = int(numero)  # Converte para inteiro (ou float se quiser)
             print(f"Número inserido: {numero}")
         except ValueError:
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
+        if numero <= 0:
+            txtprodinvalid['text'] = 'Por favor, insira um número válido'
 
         
         try:
+
             conn = psycopg2.connect(**config)
 
             cursor = conn.cursor()
-            nova_quant = quantidade - numero
+            if opcao_var.get() == "Remover":
+                nova_quant = quantidade - numero
+            else:
+                nova_quant = quantidade + numero
             query = f'''
             UPDATE produtos
             SET quant = %s
@@ -434,32 +479,29 @@ def remover_prod():
             '''
             cursor.execute(query,(nova_quant,int(keys[btn_selecionaprod.get()])))
 
-            print(f"removendo {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
+            if opcao_var.get() == "Remover":
+                print(f"Adicionando {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
+            else:
+                print(f"Adcionando {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
             conn.commit()
             cursor.close()
             conn.close()
-            log = "\nProdutos removidos com sucesso"
+            if opcao_var.get() == "Remover":
+                log = "\nProdutos removidos com sucesso"
+            else:
+                log = "\nProdutos adicionados com sucesso"
             consulta_banco()
             quantidade = atualizar_quantidade(None)
             txtprodinvalid["text"] += log
 
         except psycopg2.Error as e:
-            log += f"\nFALHA AO CONECTAR AO BANCO PARA REMOVER O PRODUTO: {str(e)}"
+            log += f"\nFALHA AO CONECTAR AO BANCO PARA ADICIONAR OU REMOVER O PRODUTO: {str(e)}"
             print(f"Erro ao conectar no banco:{str(e)}")
 
-
-
-
-        
-
-
-        
-
-    btn = Button(janela_remover, text="Remover", command=remover)
+    btn = Button(janela_add_rm, text=opcao_var.get(), command=remover_adicionar)
     btn.pack()
 
-
-    janela_remover.mainloop()
+    janela_add_rm.mainloop()
 
 
 
@@ -482,7 +524,7 @@ btnlerxml.pack(pady=(0,15),ipadx=80)
 btngerarexcel = Button(win,text="Gerar Excel",font=("Arial",12),command=gerar_excel)
 btngerarexcel.pack(pady=(0,15),ipadx=80)
 
-btnremoverprod = Button(win,text="Remover Produto",font=("Arial",12),command=remover_prod)
+btnremoverprod = Button(win,text="Adicionar/Remover Produto",font=("Arial",12),command=add_rm_prod)
 btnremoverprod.pack(pady=(0,15),ipadx=80)
 
 msg = Label(win,text=" ",bg="white")
