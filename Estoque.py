@@ -9,6 +9,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
 import json
+from datetime import datetime
 
 with open("config.json") as f:
     config = json.load(f)
@@ -462,21 +463,38 @@ def add_rm_prod():
         if numero <= 0:
             txtprodinvalid['text'] = 'Por favor, insira um número válido'
 
-        
+    
         try:
 
             conn = psycopg2.connect(**config)
 
             cursor = conn.cursor()
+            boleanadic = 0
             if opcao_var.get() == "Remover":
                 nova_quant = quantidade - numero
+                boleanadic = 1
             else:
                 nova_quant = quantidade + numero
+                boleanadic = 0
+
+            query = f'''
+            INSERT INTO historicoestoque(
+            datah,
+            idproduto,
+            quant,
+            adicao_remocao
+            )
+            VALUES(%s,%s,%s,%s)
+            '''
+            datah = datetime.now()
+            cursor.execute(query,(datah,int(keys[btn_selecionaprod.get()]),numero,boleanadic))
+
             query = f'''
             UPDATE produtos
             SET quant = %s
             WHERE idproduto = %s
             '''
+            
             cursor.execute(query,(nova_quant,int(keys[btn_selecionaprod.get()])))
 
             if opcao_var.get() == "Remover":
@@ -484,6 +502,8 @@ def add_rm_prod():
             else:
                 print(f"Adcionando {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
             conn.commit()
+
+
             cursor.close()
             conn.close()
             if opcao_var.get() == "Remover":
