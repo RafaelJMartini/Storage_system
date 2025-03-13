@@ -7,14 +7,46 @@ import xml.etree.ElementTree as ET
 import time
 import pandas as pd
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment
 import json
 from datetime import datetime
+
+import logging
+import sys
+
+# Configurar o logging para redirecionar todos os prints para um arquivo
+logging.basicConfig(
+    filename="log.log",  # Nome do arquivo de log
+    filemode="a",                 # "a" (append) para adicionar novas mensagens ao invés de sobrescrever
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Formato da mensagem
+    level=logging.INFO            # Nível de log (INFO, DEBUG, ERROR, etc.)
+)
+
+# Redirecionar sys.stdout para o logging (captura todos os prints)
+class Logger(object):
+    def write(self, message):
+        if message.strip():  # Evita capturar linhas vazias
+            logging.info(message.strip())
+
+    def flush(self):
+        pass  # Necessário para compatibilidade com sys.stdout
+
+sys.stdout = Logger()  # Agora, tudo que for printado vai para o log
+
+
+
+
+
+
+
+
+
+
+
 
 with open("config.json") as f:
     config = json.load(f)
 
-
+print("-------------------------Comeco-------------------------")
 def lerxml():
     log = ""
     xmls_dir = '.\\xmls'
