@@ -1,3 +1,6 @@
+#Author: Rafael Martini
+#Version: 1.0 (Release)
+
 from tkinter import *
 from tkinter.ttk import Combobox
 import psycopg2
@@ -9,49 +12,38 @@ import pandas as pd
 from openpyxl import load_workbook
 import json
 from datetime import datetime
-
 import logging
 import sys
 
-# Configurar o logging para redirecionar todos os prints para um arquivo
+#Arquivo de log
 logging.basicConfig(
-    filename="log.log",  # Nome do arquivo de log
-    filemode="a",                 # "a" (append) para adicionar novas mensagens ao invés de sobrescrever
-    format="%(asctime)s - %(levelname)s - %(message)s",  # Formato da mensagem
-    level=logging.INFO            # Nível de log (INFO, DEBUG, ERROR, etc.)
+    filename="log.log",
+    filemode="a",#(append)
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO
 )
 
-# Redirecionar sys.stdout para o logging (captura todos os prints)
+#Redirecionar prints para o logging
 class Logger(object):
     def write(self, message):
-        if message.strip():  # Evita capturar linhas vazias
+        if message.strip():
             logging.info(message.strip())
 
     def flush(self):
-        pass  # Necessário para compatibilidade com sys.stdout
+        pass  #Necessário para compatibilidade com sys.stdout
 
-sys.stdout = Logger()  # Agora, tudo que for printado vai para o log
-
-
-
-
-
-
-
-
-
-
-
+sys.stdout = Logger()  #Tudo que for printado vai para o log
 
 with open("config.json") as f:
     config = json.load(f)
 
-print("-------------------------Comeco-------------------------")
+print("-------------------------Start-------------------------")
 def lerxml():
     log = ""
     xmls_dir = '.\\xmls'
     xmls_dir_old = '.\\xmls_old'
 
+    #Cria as pastas se não houver
     try:
         os.listdir(xmls_dir)
     except FileNotFoundError:
@@ -62,7 +54,7 @@ def lerxml():
     except FileNotFoundError:
         os.makedirs(xmls_dir_old)
 
-
+    #Usadas para exibir os XMLs com falha
     qtd_sucesso = 0
     qtd_falha = 0
 
@@ -86,8 +78,6 @@ def lerxml():
                 qtd_falha += 1
                 log += f"\nERRO: A versão do arquivo {arquivo} é {versao}, o programa só aceita a versão 4.00"
                 print(f"A versão do XML é {versao}, o programa só aceita a versão 4.00 (CHAMAR O RAFAEL)")
-
-
                 continue
 
             #Busca o ID da nota
@@ -132,6 +122,7 @@ def lerxml():
                 vProd = prod.find(f'{pre}vProd').text
                 produtos.append((cProd,xProd,qCom,ncm,vProd))
                 
+            #Iniciar inserções no banco
             try:
                 conn = psycopg2.connect(**config)
 
@@ -140,7 +131,6 @@ def lerxml():
                 #Verificar se a nota já está no banco
                 query = f'''
                 SELECT 1 FROM nfs WHERE id = %s
-
                 '''
                 cursor.execute(query,(id_nf,))
 
@@ -150,10 +140,7 @@ def lerxml():
                     qtd_falha += 1
                     continue
                 
-
-
                 query_adic = f'''
-
                 INSERT INTO fornecedores(
                 cnpj,
                 razao_social,
@@ -179,39 +166,27 @@ def lerxml():
                 VALUES(%s,%s)
                 
                 RETURNING id;
-
                 '''
 
                 tempo_atual = time.localtime()
                 datahora = time.strftime("%d/%m/%Y %H:%M:%S", tempo_atual)
                 cursor.execute(query_adic,(CNPJ,empresaNome,NomeFantasia,id_nf,valorNF,CNPJ,datah,qtd_itens,datahora,id_nf))
                 idadicao = cursor.fetchone()[0]
-
                 
-
-                print(produtos)
                 for i in range(qtd_itens):
-                    print(f"o I é {i}")
-
                     query_produtosAdic = f'''
-                
-                    
-
                     INSERT INTO produtosexternos(cnpj,codigoexterno)
                     VALUES(%s,%s)
                     ON CONFLICT (cnpj, codigoexterno) DO UPDATE 
                     SET codigoexterno = EXCLUDED.codigoexterno
                     RETURNING idproduto;
-
                     '''
                     cursor.execute(query_produtosAdic,(CNPJ,produtos[i][0]))
                     conn.commit()
 
                     idinternoproduto = cursor.fetchone()[0]
-                    print(f"o id interno desse prod é {idinternoproduto}")
 
                     query_insertproduto = f'''
-
                     INSERT INTO produtos(
                     idproduto,
                     nomeprod,
@@ -222,26 +197,15 @@ def lerxml():
                     ON CONFLICT (idproduto) DO UPDATE 
                     SET quant = produtos.quant + EXCLUDED.quant;
 
-
-
                     INSERT INTO produtosdaadicao(idadicao,idproduto,quant)
                     VALUES(%s,%s,%s);
-                    
-                    
-
                     ''' 
 
                     cursor.execute(query_insertproduto,(idinternoproduto,produtos[i][1],produtos[i][3],produtos[i][2],idadicao,idinternoproduto,produtos[i][2]))
                     conn.commit()
-                    
-                        
-                    #cursor.execute(query_produtos,(produtos[i][1],produtos[i][2],produtos[i][3]))
-                    #conn.commit()
-
                 print("Produtos adicionados com sucesso!")
 
                 print("Dados adicionados com sucesso!")
-
 
             except psycopg2.Error as e:
                 log += "\nFALHA AO CONECTAR AO BANCO"
@@ -253,14 +217,11 @@ def lerxml():
                     conn.close()
                     print("Conexão fechada")
 
-            
-
-
         except ET.ParseError as e:
             print(f"Erro ao processar o arquivo{arquivo}: {e}")
         log += f"\n{arquivo} OK"
         qtd_sucesso+=1
-        #Move os arquivos para o xml_old (DESCOMENTAR QUANDO ESTIVER TUDO PRONTO)
+        #Move os arquivos para o xml_old
         shutil.move(xmls_dir+'\\'+arquivo, xmls_dir_old+'\\'+arquivo)
         print(f"movido {arquivo} de {xmls_dir} para {xmls_dir_old}")
 
@@ -271,7 +232,6 @@ def lerxml():
     if qtd_sucesso:
         log += f"\n{qtd_sucesso} XMLs adicionados com sucesso"
     msg["text"] = log
-
 
 def gerar_excel():
     log = ""
@@ -288,10 +248,7 @@ def gerar_excel():
         query = '''
         SELECT idproduto AS ID,nomeprod AS Nome_do_Produto,quant AS Quantidade
         FROM produtos
-
-
         '''
-        
         cursor = conn.cursor()
         cursor.execute(query)
         dados_excel = cursor.fetchall()
@@ -301,28 +258,21 @@ def gerar_excel():
         df.columns = ['ID','Nome do Produto','Quantidade']
         
         df.to_excel(excel_dir,index=False)
-
+        #Formata para dar o espaçamento certo nas colunas do Excel
         wb = load_workbook(excel_dir)
         ws = wb.active
-
         for col in ws.columns:
             max_length = 0
-            column = col[0].column_letter  # Pega a letra da coluna
+            column = col[0].column_letter  #Pega a letra da coluna
             for cell in col:
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(cell.value)
                 except:
                     pass
-            adjusted_width = (max_length + 2)  # Adicionando um espaço extra
+            adjusted_width = (max_length + 2)
             ws.column_dimensions[column].width = adjusted_width
-
-
-
-        # Salvando as alterações no Excel
         wb.save(excel_dir) 
-
-
 
         cursor.close()
         conn.close()
@@ -331,21 +281,17 @@ def gerar_excel():
         log += "\nFALHA AO CONECTAR AO BANCO"
         print(f"Erro ao conectar no banco:{str(e)}")
         
-
-
     log += "\nExcel gerado com sucesso"
     msg["text"] = log
 
 def add_rm_prod():
     produtos_dict = {}
     keys = {}
-    def consulta_banco():
+    def consulta_banco(): #Cria o dicionario relacionando id dos produtos e quantidades.
         try:
             conn = psycopg2.connect(**config)
-
             cursor = conn.cursor()
-                    
-            #Verificar se a nota já está no banco
+
             query = f'''
             SELECT idproduto,nomeprod,quant FROM produtos
             '''
@@ -353,14 +299,12 @@ def add_rm_prod():
             
             nonlocal produtos_dict
             nonlocal keys
-            #quantidades = []
             # Iterando pelos resultados da consulta e criando o dicionário
             for row in cursor.fetchall():
                 idproduto, nomeprod, quant = row
-                chave = f"{idproduto} - {nomeprod}"  # Você pode usar o idproduto + nomeprod como chave
-                produtos_dict[chave] = quant  # Quantidade é o valor
+                chave = f"{idproduto} - {nomeprod}"  #Usando o idproduto + nomeprod como chave para aparecer no combobox depois
+                produtos_dict[chave] = quant  
                 keys[chave] = idproduto
-                #quantidades.append(quant)
             cursor.close()
             conn.close()
 
@@ -368,25 +312,24 @@ def add_rm_prod():
             log = "\nFALHA AO CONECTAR AO BANCO"
             print(f"Erro ao conectar no banco:{str(e)}")
             return log
+        
     consulta_banco()
 
-
     def formatar_quantidade(valor):
-        """ Arredonda a quantidade para o máximo possível (inteiro se não tiver decimal) """
+        #Arredonda a quantidade para o máximo possível (inteiro se não tiver decimal)
         valor = float(valor)
-        valor = round(valor, 2)  # Arredonda para 2 casas
+        valor = round(valor, 2)
         return int(valor) if valor == int(valor) else valor  # Remove ".0" se for inteiro
 
     def atualizar_quantidade(*_):
-
-
-        """ Atualiza o texto com a quantidade do item selecionado """
-        item_selecionado = btn_selecionaprod.get()  # Pega o item selecionado no combobox
+        #Atualiza o texto com a quantidade MÁXIMA do item selecionado
+        item_selecionado = btn_selecionaprod.get()  #Pega o item selecionado no combobox
         quantidade = produtos_dict.get(item_selecionado, "Indisponível")  # Busca a quantidade no dicionário
         try:
             quantidade = float(quantidade)
         except ValueError:
             return None
+        #só mostra o máximo quando remover está selecionado
         if opcao_var.get() == "Remover":
             
             maximoitem = "(Max: {})".format(formatar_quantidade(quantidade))
@@ -397,70 +340,62 @@ def add_rm_prod():
             txtmax['text'] = ""
         return quantidade
         
-
     def escolha_rm():
         opcao_var.set("Remover")
-        print("Escolha atual:", opcao_var.get())
         btn.config(text=f"{opcao_var.get()}")
         atualizar_quantidade()
     
     def escolha_add():
         opcao_var.set("Adicionar")
-        print("Escolha atual:", opcao_var.get())
         btn.config(text=f"{opcao_var.get()}")
         txtmax['text'] = ""
 
+
+#----------------------------------Início das configurações da janela de add/remove----------------------------------
     log = ""
     janela_add_rm = Tk()
     janela_add_rm.title("Adicionar ou remover um produto")
     janela_add_rm.geometry('600x400+650+200')
 
-    #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-    
+    #Configuração do RadioButton
     opcao_var = StringVar()
-
     radio1 = Radiobutton(janela_add_rm, text="Adicionar", variable=opcao_var, value="Adicionar", command=escolha_add)
     radio2 = Radiobutton(janela_add_rm, text="Remover", variable=opcao_var, value="Remover", command=escolha_rm)
-
     opcao_var.set("Adicionar")
-
     # Posiciona os botões na janela
     radio1.pack(pady=10)
     radio2.pack()
     
-
-
-
+    #Configuração do Combobox
     lista_produtos = keys.keys()
     lista_produtos = list(lista_produtos)
     btn_selecionaprod = Combobox(janela_add_rm,values=lista_produtos)
     btn_selecionaprod.pack(pady=40,ipadx=150)
     btn_selecionaprod.set("Escolha um produto")
 
-
-#------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 
+    #Configuração dos placeholders
     def ao_clicar(event):
         if entrada.get() == "Digite a quantidade":
             entrada.delete(0, "end")  # Remove o placeholder
             entrada.config(fg="black")  # Muda a cor do texto
-
     def ao_sair(event):
         if not entrada.get():
             entrada.insert(0, "Digite a quantidade")  # Reinsere o placeholder
             entrada.config(fg="gray")  # Volta a cor para cinza
+
+    #Configuração da caixa de texto
     entrada = Entry(janela_add_rm)
     entrada.pack(pady=10,ipadx=50)
-    entrada.insert(0, "Digite a quantidade")  # Define o placeholder
+    entrada.insert(0, "Digite a quantidade")  #Define o placeholder
 
-    # Eventos para limpar/recuperar o placeholder
+    #Limpar/recuperar o placeholder
     entrada.bind("<FocusIn>", ao_clicar)
     entrada.bind("<FocusOut>", ao_sair)
 
+    #Texto de máximo de produtos que pode ser removido
     txtmax = Label(janela_add_rm,text="")
     txtmax.pack()
-
+    #Texto de log de produto inválido
     txtprodinvalid = Label(janela_add_rm,text="")
     txtprodinvalid.pack()
 
@@ -468,19 +403,22 @@ def add_rm_prod():
 
     def remover_adicionar():
         nonlocal log
+        #Validações de nome de produto e quantidade
         if btn_selecionaprod.get() not in lista_produtos:
             txtprodinvalid["text"] = "Por favor, selecione um produto válido."
             return
+        
         try:
             numero = float(entrada.get())  # Pega o valor digitado no campo
         except ValueError:
             txtprodinvalid['text'] = 'Por favor, insira um número válido'
             return
-
+        
         quantidade = atualizar_quantidade(None)
         if quantidade == None:
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
+        
         if opcao_var.get() == "Remover":
             if numero > quantidade:
                 txtprodinvalid["text"] = "Por favor, insira um número válido."
@@ -488,7 +426,6 @@ def add_rm_prod():
         
         try:
             numero = int(numero)  # Converte para inteiro (ou float se quiser)
-            print(f"Número inserido: {numero}")
         except ValueError:
             txtprodinvalid["text"] = "Por favor, insira um número válido."
             return
@@ -496,8 +433,8 @@ def add_rm_prod():
             txtprodinvalid['text'] = 'Por favor, insira um número válido'
 
     
+        #Após as validações, conecta no banco para alterar a tabela produtos e adicionar a movimentação no histórico
         try:
-
             conn = psycopg2.connect(**config)
 
             cursor = conn.cursor()
@@ -530,11 +467,10 @@ def add_rm_prod():
             cursor.execute(query,(nova_quant,int(keys[btn_selecionaprod.get()])))
 
             if opcao_var.get() == "Remover":
-                print(f"Adicionando {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
+                print(f"Removendo {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
             else:
                 print(f"Adcionando {numero} de {quantidade} do produto de ID {int(keys[btn_selecionaprod.get()])}")
             conn.commit()
-
 
             cursor.close()
             conn.close()
@@ -542,6 +478,8 @@ def add_rm_prod():
                 log = "\nProdutos removidos com sucesso"
             else:
                 log = "\nProdutos adicionados com sucesso"
+            
+            #Atualizar a quantidade para uma possível nova remoção não dar erro
             consulta_banco()
             quantidade = atualizar_quantidade(None)
             txtprodinvalid["text"] += log
@@ -555,10 +493,7 @@ def add_rm_prod():
 
     janela_add_rm.mainloop()
 
-
-
-
-#window config
+#----------------------------------Início das configurações da janela Principal----------------------------------
 win = Tk()
 win.title("Estoque JC Ferreira")
 win.geometry("800x600+500+100")
@@ -567,7 +502,6 @@ win.iconbitmap(".\\content\\icone-storage.ico")
 
 titulo = Label(win,text="Sistema de Estoque JC Ferreira",font=("Arial",20),bg="white")
 titulo.pack(pady=(10,60))
-
 
 #Buttons
 btnlerxml = Button(win,text="Ler XMLs",font=("Arial",12),command=lerxml)
@@ -581,6 +515,5 @@ btnremoverprod.pack(pady=(0,15),ipadx=80)
 
 msg = Label(win,text=" ",bg="white")
 msg.pack(pady=5)
-
 
 win.mainloop()
